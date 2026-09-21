@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- App-Icon: der Buchstabe Bā (ب) als Zeichenpfad, damit kein Font nötig ist. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <rect width="512" height="512" rx="112" fill="#1f5ee3" />
+  <g fill="none" stroke="#ffffff" stroke-linecap="round" stroke-linejoin="round" stroke-width="34">
+    <!-- Grundstrich der Schale, von rechts nach links geschwungen -->
+    <path d="M132 214 C132 300 176 336 256 336 C336 336 380 300 380 214" />
+    <!-- Aufstrich am rechten Ende -->
+    <path d="M132 214 L132 176" />
+  </g>
+  <!-- Diakritischer Punkt unterhalb -->
+  <circle cx="256" cy="402" r="24" fill="#ffffff" />
+</svg>

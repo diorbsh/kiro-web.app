@@ -1,0 +1,17 @@
+node_modules/
+dist/
+dist-ssr/
+*.local
+.DS_Store
+.vite/
+
+# Schriftdateien werden lokal ergänzt (siehe README) und nicht mitversioniert,
+# um Lizenz-/Größenfragen aus dem Repo zu halten.
+public/fonts/*.woff2
+public/fonts/*.ttf
+
+*.log
+npm-debug.log*
+.env
+.env.*
+!.env.example

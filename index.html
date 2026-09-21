@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="de" class="h-full">
+  <head>
+    <meta charset="UTF-8" />
+    <!-- viewport-fit=cover: nötig, damit env(safe-area-inset-*) auf Geräten mit Notch greift -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+    />
+    <meta name="description" content="Arabisch lernen: Alphabet-Trainer mit Schreibübung, Erkennungsübungen und Vokabeln." />
+    <meta name="theme-color" content="#1f5ee3" />
+    <!-- Vollbild-Verhalten, wenn die App vom Homescreen gestartet wird -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="Arabisch" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="icon" type="image/svg+xml" href="./icon.svg" />
+    <title>Arabisch lernen – Alphabet-Trainer</title>
+  </head>
+  <body class="h-full">
+    <div id="root" class="h-full"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

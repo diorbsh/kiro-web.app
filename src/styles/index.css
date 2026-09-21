@@ -1,0 +1,110 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Arabische Schrift.
+ *
+ * Die Datei liegt nicht im Repo (Lizenz/Größe, siehe README). Fehlt sie, greift
+ * automatisch die Fallback-Kette aus tailwind.config.js – die App bleibt dadurch
+ * immer benutzbar, nur die Typografie ist dann die des Systems.
+ * `font-display: swap` verhindert unsichtbaren Text während des Ladens.
+ */
+@font-face {
+  font-family: 'Noto Sans Arabic';
+  src: url('/fonts/NotoSansArabic-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+  /* Nur arabische Blöcke laden: Basis, Ergänzung, Präsentationsformen A/B */
+  unicode-range: U+0600-06FF, U+0750-077F, U+08A0-08FF, U+FB50-FDFF, U+FE70-FEFF, U+200C-200F;
+}
+
+@font-face {
+  font-family: 'Noto Sans Arabic';
+  src: url('/fonts/NotoSansArabic-SemiBold.woff2') format('woff2');
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0600-06FF, U+0750-077F, U+08A0-08FF, U+FB50-FDFF, U+FE70-FEFF, U+200C-200F;
+}
+
+@layer base {
+  :root {
+    /* Safe-Area als Variablen, damit sie auch in berechneten Höhen nutzbar sind */
+    --safe-top: env(safe-area-inset-top, 0px);
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+    --nav-height: 4rem;
+  }
+
+  html {
+    /* Verhindert das Auto-Vergrößern von Text beim Drehen auf iOS */
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    @apply bg-slate-50 text-slate-900 antialiased;
+    @apply dark:bg-slate-950 dark:text-slate-100;
+    /* App-Gefühl: kein Gummiband-Scrollen über die Ränder hinaus */
+    overscroll-behavior-y: contain;
+  }
+
+  /* Sichtbarer Fokus nur bei Tastaturnutzung – nicht bei Touch/Maus */
+  :focus-visible {
+    @apply outline-none ring-2 ring-brand-500 ring-offset-2 ring-offset-slate-50;
+    @apply dark:ring-offset-slate-950;
+  }
+
+  /* Tap-Highlight auf Mobilgeräten unterdrücken (wir liefern eigenes Feedback) */
+  button,
+  [role='button'] {
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+}
+
+@layer components {
+  /*
+   * Basisklasse für arabische Textbausteine. Wird von der Komponente
+   * <ArabicText> gesetzt; dir/lang kommen als Attribute dazu.
+   */
+  .arabic {
+    font-family: theme('fontFamily.arabic');
+    font-feature-settings: 'liga' 1, 'calt' 1;
+    /* Arabische Glyphen brauchen mehr vertikalen Raum als lateinische */
+    line-height: 1.7;
+  }
+
+  /* Zeichenfläche der Schreibübung: Browser-Gesten dürfen nicht dazwischenkommen */
+  .writing-surface {
+    touch-action: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  /* Innenabstände, die die Safe Area berücksichtigen */
+  .pt-safe {
+    padding-top: calc(var(--safe-top) + 0.5rem);
+  }
+
+  .pb-safe {
+    padding-bottom: calc(var(--safe-bottom) + 0.5rem);
+  }
+
+  /* Platz für die Bottom-Navigation freihalten */
+  .pb-nav {
+    padding-bottom: calc(var(--nav-height) + var(--safe-bottom) + 1rem);
+  }
+}
+
+/* Requirement 8.7: Animationen respektieren die Systemeinstellung */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

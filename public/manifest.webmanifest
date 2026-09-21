@@ -1,0 +1,21 @@
+{
+  "name": "Arabisch lernen – Alphabet-Trainer",
+  "short_name": "Arabisch",
+  "description": "Die arabische Schrift spielerisch lernen: Buchstaben, Formen, Schreibübung und Vokabeln.",
+  "lang": "de",
+  "dir": "ltr",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f8fafc",
+  "theme_color": "#1f5ee3",
+  "icons": [
+    {
+      "src": "./icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
