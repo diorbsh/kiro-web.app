@@ -1,0 +1,46 @@
+name: CI
+
+# Prüft bei jedem Push und jedem Pull Request, ob der Code gesund ist:
+# Typen, Logik-Tests und Produktions-Build. Unabhängig von GitHub Pages –
+# dieser Workflow muss immer grün sein.
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # Kein "npm ci": die package-lock.json entsteht beim ersten lokalen
+      # Installieren. Liegt sie im Repo, kann hier auf "npm ci" gewechselt werden.
+      - name: Abhängigkeiten installieren
+        run: npm install
+
+      - name: Typprüfung
+        run: npm run typecheck
+
+      - name: Logik-Tests (Daten, Schrift, SRS, Gamification, Generator)
+        run: npm test
+
+      - name: Produktions-Build
+        run: npx vite build
+
+      # Der Build wird als Artefakt abgelegt – so kann man ihn auch ohne Pages
+      # herunterladen und lokal öffnen.
+      - name: Build als Artefakt ablegen
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist
+          retention-days: 14

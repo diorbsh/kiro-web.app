@@ -1,10 +1,17 @@
-name: Build & Deploy
+name: Deploy to Pages
 
-# Baut die App und veröffentlicht sie auf GitHub Pages.
-# Einmalige Einstellung im Repo: Settings → Pages → Source: "GitHub Actions".
+# Veröffentlicht die App auf GitHub Pages.
+#
+# EINMALIGE VORAUSSETZUNG:
+#   Settings → Pages → Build and deployment → Source: "GitHub Actions"
+#
+# Ohne diese Einstellung schlägt der Schritt "configure-pages" fehl
+# ("Get Pages site failed"). Das Einschalten per API ist dem Actions-Token nicht
+# erlaubt, deshalb bleibt es ein manueller Klick. Die Code-Prüfung läuft davon
+# unabhängig im Workflow "CI".
 on:
   push:
-    branches: ['main', 'feat/arabisch-alphabet-trainer']
+    branches: ['main']
   workflow_dispatch:
 
 permissions:
@@ -12,50 +19,34 @@ permissions:
   pages: write
   id-token: write
 
+# Ein Deployment zur Zeit; laufende nicht abbrechen.
 concurrency:
   group: pages
   cancel-in-progress: false
 
 jobs:
-  # Schritt 1: Typprüfung und Logik-Tests – schlägt früh fehl, wenn etwas kaputt ist.
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-      # Kein "npm ci": die package-lock.json entsteht erst beim ersten lokalen
-      # Installieren. Liegt sie im Repo, kann hier auf "npm ci" gewechselt werden.
-      - run: npm install
-      - name: Typprüfung
-        run: npm run typecheck
-      - name: Logik-Tests (Daten, SRS, Gamification, Generator)
-        run: npm test
-
-  # Schritt 2: Produktions-Build erzeugen und als Pages-Artefakt hochladen.
   build:
-    needs: test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: npm install
-      # Muss vor dem Build laufen. `enablement: true` schaltet Pages beim ersten Mal
-      # selbst ein – ohne das schlägt der Schritt fehl, solange unter
-      # Settings → Pages nicht manuell "GitHub Actions" gewählt wurde.
+
+      - name: Abhängigkeiten installieren
+        run: npm install
+
+      # Muss vor dem Build laufen: liefert den Basis-Pfad der Pages-Site.
       - uses: actions/configure-pages@v5
-        with:
-          enablement: true
+
       - name: Build
         run: npx vite build
+
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
 
-  # Schritt 3: Veröffentlichen.
   deploy:
     needs: build
     runs-on: ubuntu-latest
