@@ -43,9 +43,14 @@ jobs:
         with:
           node-version: '22'
       - run: npm install
+      # Muss vor dem Build laufen. `enablement: true` schaltet Pages beim ersten Mal
+      # selbst ein – ohne das schlägt der Schritt fehl, solange unter
+      # Settings → Pages nicht manuell "GitHub Actions" gewählt wurde.
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
       - name: Build
         run: npx vite build
-      - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
