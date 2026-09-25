@@ -10,40 +10,64 @@ import { useAppState } from '../../state/AppState.tsx';
 import { displayedStreak, levelProgress } from '../../domain/gamification.ts';
 
 interface HomeScreenProps {
-  onStartLetters: () => void;
+  /** Buchstaben-Quiz nur mit Schrift/Form – ohne Ton, läuft immer. */
+  onStartLettersScript: () => void;
+  /** Buchstaben-Quiz mit Hören – nur bei verfügbarer arabischer Stimme sinnvoll. */
+  onStartLettersAudio: () => void;
   onStartVocab: () => void;
+  /** Steht eine arabische Stimme zur Verfügung? Steuert die Hören-Kachel. */
+  audioAvailable: boolean;
 }
 
-/** Eine große, gut tappbare Quiz-Kachel. */
+/**
+ * Eine große, gut tappbare Quiz-Kachel.
+ *
+ * `disabled` grau­t die Kachel aus und zeigt einen kurzen Hinweis statt der
+ * Beschreibung – so bleibt sichtbar, dass es die Variante gibt, sie aber gerade
+ * nicht spielbar ist (z. B. „Buchstaben (Hören)" ohne arabische Stimme).
+ */
 function QuizCard({
   emoji,
   title,
   description,
   onClick,
+  disabled = false,
+  disabledHint,
 }: {
   emoji: string;
   title: string;
   description: string;
   onClick: () => void;
+  disabled?: boolean;
+  disabledHint?: string;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className="flex w-full items-center gap-4 rounded-2xl bg-white p-5 text-left shadow-sm active:bg-brand-50 dark:bg-slate-900 dark:active:bg-slate-800"
+      disabled={disabled}
+      aria-disabled={disabled}
+      className="flex w-full items-center gap-4 rounded-2xl bg-white p-5 text-left shadow-sm active:bg-brand-50 disabled:cursor-not-allowed disabled:opacity-50 disabled:active:bg-white dark:bg-slate-900 dark:active:bg-slate-800 dark:disabled:active:bg-slate-900"
     >
       <span className="text-4xl" aria-hidden="true">
         {emoji}
       </span>
       <span className="min-w-0">
         <span className="block text-lg font-semibold">{title}</span>
-        <span className="block text-sm text-slate-500 dark:text-slate-400">{description}</span>
+        <span className="block text-sm text-slate-500 dark:text-slate-400">
+          {disabled && disabledHint ? disabledHint : description}
+        </span>
       </span>
     </button>
   );
 }
 
-export function HomeScreen({ onStartLetters, onStartVocab }: HomeScreenProps) {
+export function HomeScreen({
+  onStartLettersScript,
+  onStartLettersAudio,
+  onStartVocab,
+  audioAvailable,
+}: HomeScreenProps) {
   const { state, persistent } = useAppState();
   const level = levelProgress(state.xp);
   const streak = displayedStreak(state);
@@ -95,14 +119,22 @@ export function HomeScreen({ onStartLetters, onStartVocab }: HomeScreenProps) {
       <div className="space-y-3">
         <QuizCard
           emoji="🔤"
-          title="Buchstaben-Quiz"
-          description="Erkenne die Buchstaben des Alphabets."
-          onClick={onStartLetters}
+          title="Buchstaben (Schrift)"
+          description="Buchstaben am Schriftbild erkennen – ohne Ton."
+          onClick={onStartLettersScript}
+        />
+        <QuizCard
+          emoji="🔊"
+          title="Buchstaben (Hören)"
+          description="Buchstaben am Klang erkennen – mit Ton."
+          onClick={onStartLettersAudio}
+          disabled={!audioAvailable}
+          disabledHint="Auf diesem Gerät ist keine arabische Sprachausgabe verfügbar."
         />
         <QuizCard
           emoji="📖"
-          title="Wörter-Quiz"
-          description="Übe die Bedeutung erster Vokabeln."
+          title="Wörter"
+          description="Umschrift → arabische Schrift und mehr."
           onClick={onStartVocab}
         />
       </div>
