@@ -175,6 +175,8 @@ export type ExerciseType =
   | 'soundToHarakat'
   | 'deToAr'
   | 'arToDe'
+  | 'translitToArabicWord' // Umschrift lesen → arabisches Wort wählen
+  | 'arabicWordToTranslit' // arabisches Wort lesen → Umschrift wählen
   | 'matchPairs'
   | 'clozeGap'
   | 'listening';
@@ -210,7 +212,9 @@ export interface ChoiceExercise extends ExerciseBase {
     | 'harakatToSound'
     | 'soundToHarakat'
     | 'deToAr'
-    | 'arToDe';
+    | 'arToDe'
+    | 'translitToArabicWord'
+    | 'arabicWordToTranslit';
   promptMode: PromptMode;
   /** Arabischer Text der Frage (z. B. die Form im Wortkontext). */
   promptArabic?: string;

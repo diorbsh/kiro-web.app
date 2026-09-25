@@ -14,14 +14,17 @@ import {
   defaultContext,
   findConnectableWords,
   generateExercises,
+  generateLetterQuiz,
   generateReviewExercises,
   generateVocabExercises,
   makeArToDe,
+  makeArabicWordToTranslit,
   makeAudioToLetter,
   makeConnectExercise,
   makeDeToAr,
   makeFormToLetter,
   makeLetterToTranslit,
+  makeTranslitToArabicWord,
   makeTranslitToLetter,
   makeWriting,
   pickDistractors,
@@ -535,6 +538,143 @@ test('generateVocabExercises bleibt ohne genügend Distraktoren leer', () => {
 test('generateVocabExercises ist mit gleichem Seed deterministisch', () => {
   const first = generateVocabExercises(VOCAB_ITEMS, 6, ctx(555));
   const second = generateVocabExercises(VOCAB_ITEMS, 6, ctx(555));
+  assert.equal(first.length, second.length);
+  first.forEach((exercise, index) => {
+    const other = second[index];
+    assert.ok(other);
+    assert.equal(exercise.type, other.type);
+    assert.equal(exercise.itemId, other.itemId);
+    assert.deepEqual(
+      exercise.options.map((option) => option.id),
+      other.options.map((option) => option.id),
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Wörter: Umschrift ↔ arabische Schrift (Anfänger-Richtungen)
+// ---------------------------------------------------------------------------
+
+test('Umschrift→Arabisch: Frage lateinisch, Optionen arabisch', () => {
+  const target = VOCAB_ITEMS.find((item) => item.id === 'vocab:bayt') as VocabItem;
+  assert.ok(target);
+
+  const exercise = makeTranslitToArabicWord(target, VOCAB_ITEMS, ctx());
+  assert.equal(exercise.type, 'translitToArabicWord');
+  // Die Frage zeigt die Umschrift, ist also lateinisch.
+  assert.equal(exercise.promptMode, 'latin');
+  assert.match(exercise.prompt, /bayt/);
+  // Die Optionen sind arabisch und werden als arabischer Text gerendert.
+  assert.ok(exercise.options.every((option) => option.isArabic));
+  assert.equal(exercise.options.length, OPTION_COUNT);
+  // Genau eine richtige Option, die zum Ziel gehört.
+  assert.equal(exercise.correctOptionId, target.id);
+  assert.equal(
+    exercise.options.filter((o) => o.id === exercise.correctOptionId).length,
+    1,
+    'richtige Option nicht eindeutig',
+  );
+  // Keine doppelten Beschriftungen.
+  const labels = exercise.options.map((o) => o.label);
+  assert.equal(new Set(labels).size, labels.length, 'doppelte Beschriftung');
+  // Distraktoren stammen aus anderen Vokabeln.
+  for (const option of exercise.options) {
+    assert.ok(
+      VOCAB_ITEMS.some((item) => item.id === option.id),
+      `fremde Option: ${option.id}`,
+    );
+  }
+});
+
+test('Arabisch→Umschrift: Frage arabisch, Optionen lateinisch', () => {
+  const target = VOCAB_ITEMS.find((item) => item.id === 'vocab:kitab') as VocabItem;
+  assert.ok(target);
+
+  const exercise = makeArabicWordToTranslit(target, VOCAB_ITEMS, ctx());
+  assert.equal(exercise.type, 'arabicWordToTranslit');
+  // Die Frage zeigt das arabische Wort.
+  assert.equal(exercise.promptMode, 'arabic');
+  assert.equal(exercise.promptArabic, target.arabic);
+  // Die Optionen sind lateinische Umschrift.
+  assert.ok(exercise.options.every((option) => !option.isArabic));
+  assert.equal(exercise.options.length, OPTION_COUNT);
+  assert.equal(exercise.correctOptionId, target.id);
+  assert.equal(
+    exercise.options.filter((o) => o.id === exercise.correctOptionId).length,
+    1,
+    'richtige Option nicht eindeutig',
+  );
+  const labels = exercise.options.map((o) => o.label);
+  assert.equal(new Set(labels).size, labels.length, 'doppelte Beschriftung');
+  for (const option of exercise.options) {
+    assert.ok(
+      VOCAB_ITEMS.some((item) => item.id === option.id),
+      `fremde Option: ${option.id}`,
+    );
+  }
+});
+
+test('das Wörter-Quiz mischt alle vier Richtungen inkl. Umschrift↔Schrift', () => {
+  const exercises = generateVocabExercises(VOCAB_ITEMS, 12, ctx());
+  const types = new Set(exercises.map((exercise) => exercise.type));
+  assert.ok(types.has('translitToArabicWord'), 'Umschrift→Arabisch fehlt');
+  assert.ok(types.has('arabicWordToTranslit'), 'Arabisch→Umschrift fehlt');
+  // Die bestehenden Bedeutungs-Richtungen bleiben erhalten.
+  assert.ok(types.has('deToAr'), 'Bedeutung→Arabisch fehlt');
+  assert.ok(types.has('arToDe'), 'Arabisch→Bedeutung fehlt');
+});
+
+// ---------------------------------------------------------------------------
+// Buchstaben-Quiz: getrennte Varianten Schrift / Hören
+// ---------------------------------------------------------------------------
+
+test('Buchstaben-Quiz „Schrift": über viele Seeds nie eine Audio-Aufgabe', () => {
+  const ids = LETTERS.map((letter) => letter.id);
+  const scriptTypes = new Set(['formToLetter', 'letterToTranslit', 'translitToLetter']);
+
+  for (let seed = 0; seed < 40; seed += 1) {
+    // audioAvailable bewusst true – der Modus muss trotzdem tonlos bleiben.
+    const exercises = generateLetterQuiz(ids, 12, ctx(seed, { audioAvailable: true }), {
+      mode: 'script',
+    }) as ChoiceExercise[];
+    assert.equal(exercises.length, 12, `Seed ${seed}: falsche Anzahl`);
+    for (const exercise of exercises) {
+      assert.notEqual(exercise.type, 'audioToLetter', `Seed ${seed}: Audio-Aufgabe aufgetaucht`);
+      assert.ok(scriptTypes.has(exercise.type), `Seed ${seed}: fremder Typ ${exercise.type}`);
+      assert.notEqual(exercise.promptMode, 'audio', `Seed ${seed}: Audio-Prompt aufgetaucht`);
+      // Jede Aufgabe hat vier Optionen mit genau einer richtigen.
+      assert.equal(exercise.options.length, OPTION_COUNT);
+      assert.equal(
+        exercise.options.filter((o) => o.id === exercise.correctOptionId).length,
+        1,
+        `Seed ${seed}: richtige Option nicht eindeutig`,
+      );
+    }
+  }
+});
+
+test('Buchstaben-Quiz „Hören": erzeugt Audio-Aufgaben', () => {
+  const ids = LETTERS.map((letter) => letter.id);
+  const exercises = generateLetterQuiz(ids, 10, ctx(1234, { audioAvailable: true }), {
+    mode: 'audio',
+  }) as ChoiceExercise[];
+  assert.equal(exercises.length, 10);
+  // Der Audio-Modus besteht ausschließlich aus Hör-Aufgaben.
+  assert.ok(
+    exercises.every((exercise) => exercise.type === 'audioToLetter'),
+    'nur Audio-Aufgaben erwartet',
+  );
+  for (const exercise of exercises) {
+    assert.equal(exercise.promptMode, 'audio');
+    assert.equal(exercise.options.length, OPTION_COUNT);
+    assert.equal(exercise.options.filter((o) => o.id === exercise.correctOptionId).length, 1);
+  }
+});
+
+test('generateLetterQuiz ist mit gleichem Seed deterministisch', () => {
+  const ids = ['letter:baa', 'letter:sin', 'letter:mim'];
+  const first = generateLetterQuiz(ids, 6, ctx(777), { mode: 'script' }) as ChoiceExercise[];
+  const second = generateLetterQuiz(ids, 6, ctx(777), { mode: 'script' }) as ChoiceExercise[];
   assert.equal(first.length, second.length);
   first.forEach((exercise, index) => {
     const other = second[index];

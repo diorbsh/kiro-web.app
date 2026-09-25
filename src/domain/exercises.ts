@@ -430,10 +430,33 @@ export function makeConnectExercise(
 // Lektionen
 // ---------------------------------------------------------------------------
 
-/** Aufgabenarten, die für Buchstaben-Lektionen in Frage kommen. */
-function letterExerciseTypes(ctx: GeneratorContext): ExerciseType[] {
-  const types: ExerciseType[] = ['formToLetter', 'letterToTranslit', 'translitToLetter'];
-  // Ohne arabische Stimme wären Hör-Aufgaben nicht lösbar.
+/**
+ * Variante des Buchstaben-Quiz:
+ *   - 'script' → reine Schrift-/Formaufgaben, NIE Audio. Läuft auf jedem Gerät,
+ *     unabhängig von der Sprachausgabe.
+ *   - 'audio'  → gezielt Hör-Aufgaben (audioToLetter). Setzt eine arabische Stimme
+ *     voraus; die Kachel wird sonst gar nicht angeboten.
+ *
+ * Bewusst nicht 'writing' genannt: 'writing' meint im Datenmodell die Schreib-Canvas-
+ * Übung, hier geht es um das Erkennen des Schriftbilds per Auswahl.
+ */
+export type LetterQuizMode = 'script' | 'audio';
+
+/**
+ * Aufgabenarten, die für Buchstaben-Lektionen in Frage kommen.
+ *
+ * Ohne `mode` (Lernpfad, Wiederholen) bleibt das bisherige Verhalten erhalten:
+ * schrift-/formbasierte Typen plus Audio, falls eine Stimme verfügbar ist.
+ */
+function letterExerciseTypes(ctx: GeneratorContext, mode?: LetterQuizMode): ExerciseType[] {
+  // Reine Schrift-Variante: keinerlei Audio, damit sie auf jedem Gerät funktioniert.
+  const scriptTypes: ExerciseType[] = ['formToLetter', 'letterToTranslit', 'translitToLetter'];
+  if (mode === 'script') return scriptTypes;
+  // Audio-Variante: ausschließlich Hör-Aufgaben.
+  if (mode === 'audio') return ['audioToLetter'];
+
+  // Ohne explizite Variante: gemischt, Audio nur bei verfügbarer Stimme.
+  const types = [...scriptTypes];
   if (ctx.audioAvailable) types.unshift('audioToLetter');
   return types;
 }
@@ -624,13 +647,97 @@ export function makeArToDe(
 }
 
 /**
+ * Umschrift → Arabisch: lateinische Umschrift lesen, arabisches Wort wählen.
+ *
+ * Genau die richtige Richtung für Anfänger: Der Klang/die Umschrift ist bekannt
+ * („bayt"), nur das arabische Schriftbild noch nicht. Statt selbst zu schreiben,
+ * wählt der Lernende das passende arabische Wort (بيت) aus vier Optionen.
+ */
+export function makeTranslitToArabicWord(
+  target: VocabItem,
+  pool: VocabItem[],
+  ctx: GeneratorContext,
+): ChoiceExercise {
+  const distractors = pickVocabDistractors(target, pool, OPTION_COUNT - 1, ctx.random);
+  const { options, correctOptionId } = buildOptions(
+    { id: target.id, label: target.arabic, isArabic: true },
+    distractors.map((item) => ({ id: item.id, label: item.arabic, isArabic: true })),
+    ctx.random,
+  );
+
+  return {
+    id: nextId('translitToArabicWord'),
+    type: 'translitToArabicWord',
+    itemId: target.id,
+    // Die Umschrift steht in der Aufgabenstellung – deutscher Rahmen, lateinischer Kern.
+    prompt: `Welches Wort ist „${target.translit}"?`,
+    promptMode: 'latin',
+    options,
+    correctOptionId,
+    explanation: `„${target.translit}" schreibt man ${target.arabic} und bedeutet „${target.german}".`,
+  };
+}
+
+/**
+ * Arabisch → Umschrift: arabisches Wort lesen, lateinische Umschrift wählen.
+ *
+ * Die Rückrichtung zu `makeTranslitToArabicWord`: Der Lernende sieht das arabische
+ * Schriftbild und ordnet ihm den bekannten Klang (die Umschrift) zu.
+ */
+export function makeArabicWordToTranslit(
+  target: VocabItem,
+  pool: VocabItem[],
+  ctx: GeneratorContext,
+): ChoiceExercise {
+  const distractors = pickVocabDistractors(target, pool, OPTION_COUNT - 1, ctx.random);
+  const { options, correctOptionId } = buildOptions(
+    { id: target.id, label: target.translit, isArabic: false },
+    distractors.map((item) => ({ id: item.id, label: item.translit, isArabic: false })),
+    ctx.random,
+  );
+
+  return {
+    id: nextId('arabicWordToTranslit'),
+    type: 'arabicWordToTranslit',
+    itemId: target.id,
+    prompt: 'Wie wird dieses Wort ausgesprochen?',
+    promptMode: 'arabic',
+    promptArabic: target.arabic,
+    // Bei Audio-Verfügbarkeit kann die UI das Wort zusätzlich vorlesen.
+    ttsText: target.ttsText ?? target.arabic,
+    options,
+    correctOptionId,
+    explanation: `${target.arabic} spricht man „${target.translit}" und bedeutet „${target.german}".`,
+  };
+}
+
+/**
+ * Die vier Richtungen des Wörter-Quiz – rotieren nacheinander durch einen Lauf.
+ *
+ * Reihenfolge bewusst so gewählt, dass sich Frage-Art (lateinisch/arabisch) und
+ * Antwort-Art (Bedeutung/Umschrift/Schriftbild) abwechseln:
+ *   1. Umschrift → arabische Schrift   (Anfänger-Fokus: „bayt" → بيت)
+ *   2. Bedeutung → arabische Schrift    (deToAr: „Haus" → بيت)
+ *   3. arabische Schrift → Umschrift    (بيت → „bayt")
+ *   4. arabische Schrift → Bedeutung    (arToDe: بيت → „Haus")
+ */
+const VOCAB_DIRECTION_BUILDERS = [
+  makeTranslitToArabicWord,
+  makeDeToAr,
+  makeArabicWordToTranslit,
+  makeArToDe,
+] as const;
+
+/**
  * Erzeugt einen Lauf aus Vokabelaufgaben.
  *
  * Der reguläre Lektions-Generator liefert für `kind:'vocab'` bewusst nichts – die
  * Vokabeln stehen nicht im linearen Buchstaben-Lernpfad, sondern werden als eigener
- * Quiz-Modus abgefragt. Beide Richtungen (Deutsch→Arabisch und Arabisch→Deutsch)
- * wechseln sich ab, damit ein Wort nicht nur passiv wiedererkannt, sondern auch
- * aktiv abgerufen wird.
+ * Quiz-Modus abgefragt. Es werden vier Richtungen gemischt (siehe
+ * `VOCAB_DIRECTION_BUILDERS`), damit ein Wort sowohl passiv erkannt als auch aktiv
+ * abgerufen wird – und damit ein Anfänger über die Umschrift-Richtung
+ * („Umschrift → arabische Schrift") auch dann durchkommt, wenn er ein arabisches
+ * Wort noch nicht aus dem Gedächtnis schreiben könnte.
  *
  * Distraktoren stammen aus demselben `items`-Pool. Damit mindestens vier Optionen
  * (eine richtige + drei falsche) möglich sind, braucht der Pool ≥ 4 Einträge – sonst
@@ -650,12 +757,38 @@ export function generateVocabExercises(
 
   for (let i = 0; i < count; i += 1) {
     const target = order[i % order.length] as VocabItem;
-    // Richtung abwechseln: gerade → Deutsch→Arabisch, ungerade → Arabisch→Deutsch.
-    const exercise =
-      i % 2 === 0 ? makeDeToAr(target, items, ctx) : makeArToDe(target, items, ctx);
-    exercises.push(exercise);
+    // Richtung rotiert versetzt zur Wort-Schleife → abwechslungsreiche Folge.
+    const build = VOCAB_DIRECTION_BUILDERS[i % VOCAB_DIRECTION_BUILDERS.length]!;
+    exercises.push(build(target, items, ctx));
   }
 
+  return exercises;
+}
+
+/**
+ * Gemeinsamer Kern für Buchstaben-Läufe aus beliebigen Item-IDs.
+ *
+ * Rotiert die Buchstaben durch die Aufgaben-Schleife und die Aufgabenarten versetzt
+ * dazu, sodass jeder Buchstabe mehrfach und in verschiedenen Zugängen vorkommt.
+ */
+function buildLetterRun(
+  itemIds: string[],
+  count: number,
+  ctx: GeneratorContext,
+  mode?: LetterQuizMode,
+): Exercise[] {
+  const letters = itemIds
+    .map((id) => getLetter(id))
+    .filter((letter): letter is Letter => letter !== undefined);
+  if (letters.length === 0) return [];
+
+  const types = letterExerciseTypes(ctx, mode);
+  const exercises: Exercise[] = [];
+  for (let i = 0; i < count; i += 1) {
+    const letter = letters[i % letters.length] as Letter;
+    const type = types[Math.floor(i / letters.length) % types.length] as ExerciseType;
+    exercises.push(buildLetterExercise(type, letter, ctx));
+  }
   return exercises;
 }
 
@@ -668,17 +801,21 @@ export function generateReviewExercises(
   count: number,
   ctx: GeneratorContext,
 ): Exercise[] {
-  const letters = itemIds
-    .map((id) => getLetter(id))
-    .filter((letter): letter is Letter => letter !== undefined);
-  if (letters.length === 0) return [];
+  return buildLetterRun(itemIds, count, ctx);
+}
 
-  const types = letterExerciseTypes(ctx);
-  const exercises: Exercise[] = [];
-  for (let i = 0; i < count; i += 1) {
-    const letter = letters[i % letters.length] as Letter;
-    const type = types[Math.floor(i / letters.length) % types.length] as ExerciseType;
-    exercises.push(buildLetterExercise(type, letter, ctx));
-  }
-  return exercises;
+/**
+ * Erzeugt einen Buchstaben-Quiz-Lauf in einer festen Variante.
+ *
+ * - `mode: 'script'` erzeugt garantiert KEINE audioToLetter-Aufgaben und ist damit
+ *   auf jedem Gerät spielbar, auch ohne Sprachausgabe.
+ * - `mode: 'audio'` erzeugt gezielt Hör-Aufgaben (setzt eine arabische Stimme voraus).
+ */
+export function generateLetterQuiz(
+  letterIds: string[],
+  count: number,
+  ctx: GeneratorContext,
+  options: { mode: LetterQuizMode },
+): Exercise[] {
+  return buildLetterRun(letterIds, count, ctx, options.mode);
 }
