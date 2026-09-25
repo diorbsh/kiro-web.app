@@ -23,6 +23,7 @@ import type {
   HarakatItem,
   Lesson,
   Letter,
+  VocabItem,
   WritingExercise,
 } from './types.ts';
 
@@ -529,6 +530,133 @@ export function generateExercises(lesson: Lesson, ctx: GeneratorContext): Exerci
     default:
       return [];
   }
+}
+
+// ---------------------------------------------------------------------------
+// Vokabeln
+// ---------------------------------------------------------------------------
+
+/**
+ * Wählt falsche Antwortoptionen für eine Vokabelaufgabe.
+ *
+ * Anders als bei Buchstaben gibt es hier keine „formähnlichen" Distraktoren – die
+ * Verwechslungsgefahr entsteht über die Bedeutung. Wir ziehen deshalb schlicht
+ * andere Vokabeln aus demselben Pool, bevorzugt aus derselben Einheit (thematisch
+ * naheliegend und damit anspruchsvoller).
+ */
+export function pickVocabDistractors(
+  target: VocabItem,
+  pool: VocabItem[],
+  count: number,
+  random: RandomFn,
+): VocabItem[] {
+  const chosen: VocabItem[] = [];
+  const used = new Set<string>([target.id]);
+
+  const addFrom = (candidates: VocabItem[]): void => {
+    for (const candidate of shuffle(candidates, random)) {
+      if (chosen.length >= count) return;
+      if (used.has(candidate.id)) continue;
+      used.add(candidate.id);
+      chosen.push(candidate);
+    }
+  };
+
+  // 1. Gleiche Einheit – thematisch nah, dadurch die besseren Distraktoren.
+  addFrom(pool.filter((item) => item.unitId === target.unitId));
+  // 2. Auffüllen mit allen übrigen Vokabeln.
+  addFrom(pool);
+
+  return chosen.slice(0, count);
+}
+
+/** Deutsch → Arabisch: Bedeutung lesen, arabisches Wort wählen. */
+export function makeDeToAr(
+  target: VocabItem,
+  pool: VocabItem[],
+  ctx: GeneratorContext,
+): ChoiceExercise {
+  const distractors = pickVocabDistractors(target, pool, OPTION_COUNT - 1, ctx.random);
+  const { options, correctOptionId } = buildOptions(
+    { id: target.id, label: target.arabic, isArabic: true },
+    distractors.map((item) => ({ id: item.id, label: item.arabic, isArabic: true })),
+    ctx.random,
+  );
+
+  return {
+    id: nextId('deToAr'),
+    type: 'deToAr',
+    itemId: target.id,
+    prompt: `Wie heißt „${target.german}" auf Arabisch?`,
+    promptMode: 'latin',
+    options,
+    correctOptionId,
+    explanation: `„${target.german}" heißt ${target.arabic} (${target.translit}).`,
+  };
+}
+
+/** Arabisch → Deutsch: arabisches Wort lesen, Bedeutung wählen. */
+export function makeArToDe(
+  target: VocabItem,
+  pool: VocabItem[],
+  ctx: GeneratorContext,
+): ChoiceExercise {
+  const distractors = pickVocabDistractors(target, pool, OPTION_COUNT - 1, ctx.random);
+  const { options, correctOptionId } = buildOptions(
+    { id: target.id, label: target.german, isArabic: false },
+    distractors.map((item) => ({ id: item.id, label: item.german, isArabic: false })),
+    ctx.random,
+  );
+
+  return {
+    id: nextId('arToDe'),
+    type: 'arToDe',
+    itemId: target.id,
+    prompt: 'Was bedeutet dieses Wort?',
+    promptMode: 'arabic',
+    promptArabic: target.arabic,
+    // Bei Audio-Verfügbarkeit kann die UI das Wort zusätzlich vorlesen.
+    ttsText: target.ttsText ?? target.arabic,
+    options,
+    correctOptionId,
+    explanation: `${target.arabic} (${target.translit}) bedeutet „${target.german}".`,
+  };
+}
+
+/**
+ * Erzeugt einen Lauf aus Vokabelaufgaben.
+ *
+ * Der reguläre Lektions-Generator liefert für `kind:'vocab'` bewusst nichts – die
+ * Vokabeln stehen nicht im linearen Buchstaben-Lernpfad, sondern werden als eigener
+ * Quiz-Modus abgefragt. Beide Richtungen (Deutsch→Arabisch und Arabisch→Deutsch)
+ * wechseln sich ab, damit ein Wort nicht nur passiv wiedererkannt, sondern auch
+ * aktiv abgerufen wird.
+ *
+ * Distraktoren stammen aus demselben `items`-Pool. Damit mindestens vier Optionen
+ * (eine richtige + drei falsche) möglich sind, braucht der Pool ≥ 4 Einträge – sonst
+ * bleibt der Lauf leer.
+ */
+export function generateVocabExercises(
+  items: VocabItem[],
+  count: number,
+  ctx: GeneratorContext,
+): ChoiceExercise[] {
+  // Ohne genügend Distraktoren ließen sich keine sauberen Multiple-Choice-Aufgaben bauen.
+  if (items.length < OPTION_COUNT) return [];
+
+  const exercises: ChoiceExercise[] = [];
+  // Reihenfolge der Vokabeln einmal mischen, damit nicht immer dasselbe Wort zuerst kommt.
+  const order = shuffle(items, ctx.random);
+
+  for (let i = 0; i < count; i += 1) {
+    const target = order[i % order.length] as VocabItem;
+    // Richtung abwechseln: gerade → Deutsch→Arabisch, ungerade → Arabisch→Deutsch.
+    const exercise =
+      i % 2 === 0 ? makeDeToAr(target, items, ctx) : makeArToDe(target, items, ctx);
+    exercises.push(exercise);
+  }
+
+  return exercises;
 }
 
 /**

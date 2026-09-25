@@ -15,21 +15,26 @@ import {
   findConnectableWords,
   generateExercises,
   generateReviewExercises,
+  generateVocabExercises,
+  makeArToDe,
   makeAudioToLetter,
   makeConnectExercise,
+  makeDeToAr,
   makeFormToLetter,
   makeLetterToTranslit,
   makeTranslitToLetter,
   makeWriting,
   pickDistractors,
+  pickVocabDistractors,
   seededRandom,
   shuffle,
 } from '../src/domain/exercises.ts';
 import { LETTERS, LETTER_BY_ID } from '../src/data/letters.ts';
 import { LESSONS, LESSON_BY_ID } from '../src/data/lessons.ts';
 import { letterByChar } from '../src/data/letters.ts';
+import { VOCAB_ITEMS, vocabInUnit } from '../src/data/vocab.ts';
 import { stripJoiners } from '../src/domain/arabic.ts';
-import type { ChoiceExercise, Letter } from '../src/domain/types.ts';
+import type { ChoiceExercise, Letter, VocabItem } from '../src/domain/types.ts';
 
 /** Testkontext mit festem Seed – macht die Läufe reproduzierbar. */
 function ctx(seed = 1234, overrides = {}) {
@@ -438,4 +443,107 @@ test('der Wiederholen-Modus verkraftet eine leere Liste', () => {
   assert.deepEqual(generateReviewExercises([], 5, ctx()), []);
   // Unbekannte IDs werden ignoriert, nicht als Fehler behandelt.
   assert.deepEqual(generateReviewExercises(['gibts:nicht'], 5, ctx()), []);
+});
+
+// ---------------------------------------------------------------------------
+// Vokabeln
+// ---------------------------------------------------------------------------
+
+test('pickVocabDistractors liefert die gewünschte Anzahl ohne das Ziel', () => {
+  for (const target of VOCAB_ITEMS) {
+    const distractors = pickVocabDistractors(target, VOCAB_ITEMS, OPTION_COUNT - 1, seededRandom(3));
+    assert.equal(distractors.length, OPTION_COUNT - 1, `${target.id}: falsche Anzahl`);
+    assert.ok(
+      !distractors.some((entry) => entry.id === target.id),
+      `${target.id}: Ziel als Distraktor`,
+    );
+    assert.equal(new Set(distractors.map((entry) => entry.id)).size, distractors.length);
+  }
+});
+
+test('pickVocabDistractors bevorzugt Wörter derselben Einheit', () => {
+  // „Haus" liegt in unit:basics, das mehr als drei Vokabeln hat – die Distraktoren
+  // sollten deshalb alle aus derselben Einheit stammen.
+  const target = VOCAB_ITEMS.find((item) => item.id === 'vocab:bayt') as VocabItem;
+  assert.ok(target);
+  const sameUnit = vocabInUnit(target.unitId);
+  assert.ok(sameUnit.length >= OPTION_COUNT, 'Testannahme: Einheit hat genug Vokabeln');
+  const distractors = pickVocabDistractors(target, VOCAB_ITEMS, OPTION_COUNT - 1, seededRandom(7));
+  for (const entry of distractors) {
+    assert.equal(entry.unitId, target.unitId, `${entry.id} stammt aus fremder Einheit`);
+  }
+});
+
+test('Deutsch→Arabisch und Arabisch→Deutsch bauen saubere Auswahlaufgaben', () => {
+  const target = VOCAB_ITEMS.find((item) => item.id === 'vocab:kitab') as VocabItem;
+  assert.ok(target);
+
+  const deToAr = makeDeToAr(target, VOCAB_ITEMS, ctx());
+  assert.equal(deToAr.type, 'deToAr');
+  assert.equal(deToAr.promptMode, 'latin');
+  assert.match(deToAr.prompt, /Buch/);
+  // Die arabischen Optionen werden als arabischer Text gerendert.
+  assert.ok(deToAr.options.every((option) => option.isArabic));
+  assert.equal(deToAr.correctOptionId, target.id);
+  assert.equal(deToAr.options.length, OPTION_COUNT);
+  assert.equal(deToAr.options.filter((o) => o.id === deToAr.correctOptionId).length, 1);
+  assert.equal(new Set(deToAr.options.map((o) => o.label)).size, deToAr.options.length);
+
+  const arToDe = makeArToDe(target, VOCAB_ITEMS, ctx());
+  assert.equal(arToDe.type, 'arToDe');
+  assert.equal(arToDe.promptMode, 'arabic');
+  assert.equal(arToDe.promptArabic, target.arabic);
+  // Die deutschen Optionen sind lateinisch.
+  assert.ok(arToDe.options.every((option) => !option.isArabic));
+  assert.equal(arToDe.correctOptionId, target.id);
+  assert.equal(new Set(arToDe.options.map((o) => o.label)).size, arToDe.options.length);
+});
+
+test('generateVocabExercises füllt die geforderte Anzahl und wechselt die Richtung', () => {
+  const exercises = generateVocabExercises(VOCAB_ITEMS, 8, ctx());
+  assert.equal(exercises.length, 8);
+
+  const types = new Set(exercises.map((exercise) => exercise.type));
+  assert.ok(types.has('deToAr'), 'Richtung Deutsch→Arabisch fehlt');
+  assert.ok(types.has('arToDe'), 'Richtung Arabisch→Deutsch fehlt');
+
+  for (const exercise of exercises) {
+    assert.equal(exercise.options.length, OPTION_COUNT);
+    // Genau eine richtige Option, die zum Ziel-Item gehört.
+    assert.equal(
+      exercise.options.filter((o) => o.id === exercise.correctOptionId).length,
+      1,
+      'richtige Option nicht eindeutig',
+    );
+    assert.ok(
+      VOCAB_ITEMS.some((item) => item.id === exercise.itemId),
+      `fremdes Item: ${exercise.itemId}`,
+    );
+    // Keine doppelten Beschriftungen – sonst gäbe es zwei richtige Antworten.
+    const labels = exercise.options.map((o) => o.label);
+    assert.equal(new Set(labels).size, labels.length, 'doppelte Beschriftung');
+  }
+});
+
+test('generateVocabExercises bleibt ohne genügend Distraktoren leer', () => {
+  // Weniger Vokabeln als Optionen → keine sauberen Aufgaben möglich.
+  const tooFew = VOCAB_ITEMS.slice(0, OPTION_COUNT - 1);
+  assert.deepEqual(generateVocabExercises(tooFew, 5, ctx()), []);
+  assert.deepEqual(generateVocabExercises([], 5, ctx()), []);
+});
+
+test('generateVocabExercises ist mit gleichem Seed deterministisch', () => {
+  const first = generateVocabExercises(VOCAB_ITEMS, 6, ctx(555));
+  const second = generateVocabExercises(VOCAB_ITEMS, 6, ctx(555));
+  assert.equal(first.length, second.length);
+  first.forEach((exercise, index) => {
+    const other = second[index];
+    assert.ok(other);
+    assert.equal(exercise.type, other.type);
+    assert.equal(exercise.itemId, other.itemId);
+    assert.deepEqual(
+      exercise.options.map((option) => option.id),
+      other.options.map((option) => option.id),
+    );
+  });
 });
