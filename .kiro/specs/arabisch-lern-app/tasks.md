@@ -73,7 +73,7 @@ Aufgabe folgt eine kurze Testanleitung.
 
 ## Phase 2 – Oberfläche
 
-- [ ] 9. App-Shell, State-Container und Navigation
+- [~] 9. App-Shell, State-Container und Navigation (State-Container + View-Switch fertig; Bottom-Nav folgt)
   - `state/AppState.tsx`: Context + Reducer, Actions, Anbindung an `storage`
   - `components/shell/`: Layout, Header (Streak · XP · Level · Tagesziel),
     BottomNav, Safe-Area, `ErrorBoundary`
@@ -110,7 +110,7 @@ Aufgabe folgt eine kurze Testanleitung.
     Neustart bei 0 Herzen
   - _Requirements: 4.5, 4.6, 7.7, 7.8, 8.1, 8.6_
 
-- [ ] 14. Erkennungs-Übungs-Komponenten
+- [x] 14. Erkennungs-Übungs-Komponenten (als Quiz-Modus umgesetzt: Buchstaben + Wörter, Multiple-Choice mit Herzen)
   - `AudioChoice`, `FormChoice`, `TranslitChoice` auf Basis einer gemeinsamen
     `ChoiceGrid`-Komponente; Tastatur (1–4, Enter) und Touch; zufällige Anordnung
   - _Requirements: 4.1–4.3, 4.7, 4.8_
